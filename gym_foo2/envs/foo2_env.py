@@ -42,7 +42,7 @@ class Foo2Env(gym.Env):
 
         # Prices contains the OHCL values for the last five prices
         self.observation_space = spaces.Box(
-            low=np.array([0, 0, -1000000, 0]), high=np.array([10000, +1, +1000000, 365]), dtype=np.float16)
+            low=np.array([-10, 0]), high=np.array([10, 365]), dtype=np.float16)
 
     def reset(self):
         # Reset the state of the environment to an initial state
@@ -60,7 +60,7 @@ class Foo2Env(gym.Env):
         self.bs_cash_flow_balance = self.premium
         self.bs_reward = 0
 
-        obs = np.array([self.current_price, self.shares_held , self.cash_flow_balance, self.time_to_maturity])
+        obs = np.array([np.log(self.current_price/self.option_strike), self.time_to_maturity])
         return obs
 
     def step(self, action):
@@ -89,7 +89,7 @@ class Foo2Env(gym.Env):
             self.reward = [0]
             self.bs_reward = [0]
 
-        obs = np.array([self.current_price, self.shares_held, self.cash_flow_balance, self.time_to_maturity])
+        obs = np.array([np.log(self.current_price/self.option_strike), self.time_to_maturity])
         return obs, self.reward, self.isTerminalState, self.shares_held, self.bs_delta_amount_held, {}
 
     def _take_action(self, action):
@@ -103,10 +103,10 @@ class Foo2Env(gym.Env):
         if self.time_to_maturity>0:
             #action = np.float64(action[0])
             #action = action[0]
-            mu = 1/(1+np.exp(-action))
-            #sigma = np.float64(action[1])
-            #sigma = action[1]
-            sigma = np.exp(sigma)
+            #print(action)
+            mu = action[0][0]
+            sigma = action[0][1]
+
             #print("mu", mu)
             #print("sigma", sigma)
             amount = np.random.normal(mu, sigma, 1)
@@ -123,11 +123,10 @@ class Foo2Env(gym.Env):
             self.bs_cash_flow_balance = self.bs_cash_flow_balance - bs_purchase * self.current_price
 
 
-
-
     def render(self, mode='human', close=False):
         # Render the environment to the screen
         if self.time_to_maturity==0:
+            print('------------------------------------------------')
             print(f'Step: {self.current_step}')
             print(f'CurrentPrice: {self.current_price}')
             print(f'Cash Balance: {self.cash_flow_balance}')
@@ -137,4 +136,5 @@ class Foo2Env(gym.Env):
             print(f'done: {self.isTerminalState}')
             print(f'self.reward: {self.reward}')
             print(f'self.bs_reward: {self.bs_reward}')
+            print('------------------------------------------------')
 
