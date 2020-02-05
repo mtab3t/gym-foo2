@@ -76,9 +76,8 @@ class Foo2Env(gym.Env):
             if self.current_price > self.option_strike:
                 self.cash_flow_balance += -(1 - self.shares_held)*self.current_price + self.option_strike
                 self.change_in_wealth = -(1 - self.shares_held)*self.current_price + self.option_strike
-
                 self.bs_cash_flow_balance += -(1 - self.bs_delta_amount_held)*self.current_price + self.option_strike
-                self.bs_change_in_wealth = -(1 - self.bs_delta_amount_held)*self.current_price + self.option_strike
+                self.bs_change_in_wealth += -self.current_price + self.option_strike
             else:
                 self.cash_flow_balance += self.shares_held*self.current_price
                 self.bs_cash_flow_balance += self.bs_delta_amount_held*self.current_price
@@ -97,29 +96,27 @@ class Foo2Env(gym.Env):
 
             mu = action[0][0]
             sigma = np.sqrt(action[0][1])
-
             amount = np.random.normal(mu, sigma, 1)
             amount = np.clip(amount, 0, 1)
-
             amount_purchased = amount - self.shares_held
-            self.shares_held = amount
+
             self.cash_flow_balance = self.cash_flow_balance - amount_purchased * self.current_price
-            self.change_in_wealth = - amount_purchased * self.current_price
 
             d1 = (1/(self.volatility*np.sqrt(self.time_to_maturity/365))) *(np.log(self.current_price/self.option_strike) +
                                                     0.5*self.volatility*self.volatility*(self.time_to_maturity/365))
             bs_delta = norm.cdf(d1)
             bs_purchase = bs_delta - self.bs_delta_amount_held
-            self.bs_delta_amount_held = bs_delta
+
             self.bs_cash_flow_balance = self.bs_cash_flow_balance - bs_purchase * self.current_price
-
-            self.bs_change_in_wealth = - bs_purchase * self.current_price
-
             self.previous_price = self.current_price
             rnd = np.random.standard_normal()
             self.current_price = self.previous_price * np.exp(-0.5 * self.volatility * self.volatility * 1 / 365 +
                                                               rnd * self.volatility * np.sqrt(1 / 365))
 
+            self.change_in_wealth = self.shares_held*(self.current_price - self.previous_price)
+            self.shares_held = amount
+            self.bs_change_in_wealth = self.bs_delta_amount_held * (self.current_price - self.previous_price)
+            self.bs_delta_amount_held = bs_delta
 
     def render(self, mode='human', close=False):
         # Render the environment to the screen
