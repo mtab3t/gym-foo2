@@ -22,6 +22,8 @@ class Foo2Env(gym.Env):
         self.bs_delta_amount_held = 0
         self.bs_cash_flow_balance = 0
         self.bs_reward = 0
+        self.change_in_wealth = 0
+        self.bs_change_in_wealth = 0
 
         d1 = (1 / (self.volatility * np.sqrt(self.time_to_maturity / 365))) * (
                     np.log(self.current_price / self.option_strike) +
@@ -29,12 +31,11 @@ class Foo2Env(gym.Env):
         d2 = d1 - self.volatility*np.sqrt(self.time_to_maturity / 365)
 
         self.premium = self.current_price* norm.cdf(d1) - self.option_strike* norm.cdf(d2)
-        print(self.premium)
 
         self.cash_flow_balance = self.premium
         self.bs_cash_flow_balance = self.premium
 
-        self.reward_range = (-np.inf, 0)
+        self.reward_range = (-np.inf, +np.inf)
 
         # Hedging Actions of the format Buy x%, Sell x%, Hold, etc. min amount of hedge ration is zero and max amount is 100
         self.action_space = spaces.Box(
@@ -59,6 +60,8 @@ class Foo2Env(gym.Env):
         self.bs_delta_amount_held = 0
         self.bs_cash_flow_balance = self.premium
         self.bs_reward = 0
+        self.change_in_wealth = 0
+        self.bs_change_in_wealth = 0
 
         obs = np.array([np.log(self.current_price/self.option_strike), self.time_to_maturity])
         return obs
@@ -70,50 +73,38 @@ class Foo2Env(gym.Env):
         self.time_to_maturity -= 1
 
         if (self.time_to_maturity) == 0:
-
             if self.current_price > self.option_strike:
                 self.cash_flow_balance += -(1 - self.shares_held)*self.current_price + self.option_strike
+                self.change_in_wealth = -(1 - self.shares_held)*self.current_price + self.option_strike
+
                 self.bs_cash_flow_balance += -(1 - self.bs_delta_amount_held)*self.current_price + self.option_strike
+                self.bs_change_in_wealth = -(1 - self.bs_delta_amount_held)*self.current_price + self.option_strike
             else:
                 self.cash_flow_balance += self.shares_held*self.current_price
                 self.bs_cash_flow_balance += self.bs_delta_amount_held*self.current_price
-
-            #self.cash_flow_balance += - np.maximum(0, self.current_price - self.option_strike)
-            #print("self.cash_flow_balance", self.cash_flow_balance)
-            self.reward = - np.abs(self.cash_flow_balance)
-            self.bs_reward = - np.abs(self.bs_cash_flow_balance)
-
-            #print("self.reward", self.reward)
             self.isTerminalState = True
-        else:
-            self.reward = [0]
-            self.bs_reward = [0]
+
+        self.reward = self.change_in_wealth - (0.1 / 2) * self.change_in_wealth * self.change_in_wealth
+        self.bs_reward = self.bs_change_in_wealth - (0.1 / 2) * self.bs_change_in_wealth * self.bs_change_in_wealth
 
         obs = np.array([np.log(self.current_price/self.option_strike), self.time_to_maturity])
-        return obs, self.reward, self.isTerminalState, self.shares_held, self.bs_delta_amount_held, {}
+        return obs, self.reward, self.bs_reward, self.isTerminalState, self.shares_held, self.bs_delta_amount_held, {}
 
     def _take_action(self, action):
         # Set the current price to a random price within the time step
-        self.previous_price = self.current_price
-        rnd = np.random.standard_normal()
 
-        self.current_price = self.previous_price* np.exp(-0.5*self.volatility*self.volatility*1/365 +
-                                                    rnd*self.volatility* np.sqrt(1/365))
-        #amount = action[0]
         if self.time_to_maturity>0:
-            #action = np.float64(action[0])
-            #action = action[0]
-            #print(action)
-            mu = action[0][0]
-            sigma = action[0][1]
 
-            #print("mu", mu)
-            #print("sigma", sigma)
+            mu = action[0][0]
+            sigma = np.sqrt(action[0][1])
+
             amount = np.random.normal(mu, sigma, 1)
-            #amount = np.clip(amount, self.action_space.low[0], self.action_space.high[0])
+            amount = np.clip(amount, 0, 1)
+
             amount_purchased = amount - self.shares_held
             self.shares_held = amount
             self.cash_flow_balance = self.cash_flow_balance - amount_purchased * self.current_price
+            self.change_in_wealth = - amount_purchased * self.current_price
 
             d1 = (1/(self.volatility*np.sqrt(self.time_to_maturity/365))) *(np.log(self.current_price/self.option_strike) +
                                                     0.5*self.volatility*self.volatility*(self.time_to_maturity/365))
@@ -121,6 +112,13 @@ class Foo2Env(gym.Env):
             bs_purchase = bs_delta - self.bs_delta_amount_held
             self.bs_delta_amount_held = bs_delta
             self.bs_cash_flow_balance = self.bs_cash_flow_balance - bs_purchase * self.current_price
+
+            self.bs_change_in_wealth = - bs_purchase * self.current_price
+
+            self.previous_price = self.current_price
+            rnd = np.random.standard_normal()
+            self.current_price = self.previous_price * np.exp(-0.5 * self.volatility * self.volatility * 1 / 365 +
+                                                              rnd * self.volatility * np.sqrt(1 / 365))
 
 
     def render(self, mode='human', close=False):
